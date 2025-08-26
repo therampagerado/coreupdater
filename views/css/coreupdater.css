@@ -104,9 +104,9 @@
     background: #f8f8f8;
     padding: 10px;
 }
-#file-preview-diff .diff-add { background-color: #e6ffed; }
-#file-preview-diff .diff-del { background-color: #ffeef0; }
-#file-preview-diff .diff-hunk { background-color: #f1f8ff; }
+#file-preview-diff .diff-add { background-color: #c8f7cf; }
+#file-preview-diff .diff-del { background-color: #ffd2d7; }
+#file-preview-diff .diff-hunk { background-color: #e0ecff; }
 
 .ignore-label {
     font-weight: normal !important;
