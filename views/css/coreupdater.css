@@ -109,6 +109,6 @@
 #file-preview-diff .diff-hunk { background-color: #f1f8ff; }
 
 .ignore-label {
-    font-weight: normal;
-    margin-left: 5px;
+    font-weight: normal !important;
+    margin: 0 0 0 5px;
 }

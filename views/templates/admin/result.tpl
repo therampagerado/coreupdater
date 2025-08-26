@@ -71,6 +71,9 @@
       <p>
         {l s='Oh, bummer. Some of thirty bees core files have been [1]modified[/1]. That makes it a little bit harder to update your store.' tags=['<b>'] mod='coreupdater'}
       </p>
+      {if $developerMode}
+      <p>{l s='You are using Developer mode and few functions are visible. Use them at your own risk and only if you know what they do.' mod='coreupdater'}</p>
+      {/if}
       <p>
         {l s='Modification of core files is not recommended. It makes it very hard to keep your store updated.' tags=['<b>'] mod='coreupdater'}
         {l s='You should [1]extract[/1] your modifications to overrides or to module. If unsure how to do that, please contact [2]thirty bees support[/2], we can help.' tags=['<b>', '<a href="https://thirtybees.com/contact/" target="_blank">'] mod='coreupdater'}
