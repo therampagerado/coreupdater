@@ -174,11 +174,24 @@ window.initializeCoreUpdater = function(translations) {
     incrementProcess('UPDATE', process, endProgress);
   };
 
-  var update = function(compareProcessId) {
+  var update = function(compareProcessId, ignored) {
     initProgress(translations.UPDATE, translations.UPDATE_DESCRIPTION);
-    executeAction('INIT_UPDATE', { compareProcessId: compareProcessId })
+    var params = { compareProcessId: compareProcessId };
+    if (ignored && ignored.length > 0) {
+      params['ignored'] = ignored;
+    }
+    executeAction('INIT_UPDATE', params)
         .then(runUpdate)
         .catch(displayError);
+  };
+
+  var preview = function(compareProcessId, file) {
+    executeAction('GET_FILE_DIFF', { compareProcessId: compareProcessId, file: file })
+      .then(function(diff) {
+        $('#file-diff-content').text(diff);
+        $('#file-diff-modal').modal('show');
+      })
+      .catch(displayError);
   };
 
   var checkDatabase = function() {
@@ -282,6 +295,7 @@ window.initializeCoreUpdater = function(translations) {
     compare: compare,
     update: update,
     checkDatabase: checkDatabase,
+    preview: preview,
   }
 };
 

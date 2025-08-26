@@ -46,6 +46,7 @@ class AdminCoreUpdaterController extends ModuleAdminController
     const ACTION_COMPARE_PROCESS = "COMPARE";
     const ACTION_INIT_UPDATE = "INIT_UPDATE";
     const ACTION_UPDATE_PROCESS = "UPDATE";
+    const ACTION_GET_FILE_DIFF = "GET_FILE_DIFF";
     const ACTION_GET_DATABASE_DIFFERENCES = "GET_DATABASE_DIFFERENCES";
     const ACTION_APPLY_DATABASE_FIX = 'APPLY_DATABASE_FIX';
     const ACTION_RUN_POST_UPDATE_PROCESSES = 'RUN_POST_UPDATE_PROCESSES';
@@ -773,6 +774,8 @@ class AdminCoreUpdaterController extends ModuleAdminController
                 return $this->initUpdateProcess();
             case static::ACTION_UPDATE_PROCESS:
                 return $this->updateProcess(Tools::getValue('processId'));
+            case static::ACTION_GET_FILE_DIFF:
+                return $this->getFileDiff();
             case static::ACTION_GET_DATABASE_DIFFERENCES:
                 return $this->getDatabaseDifferences();
             case static::ACTION_APPLY_DATABASE_FIX:
@@ -955,6 +958,17 @@ class AdminCoreUpdaterController extends ModuleAdminController
         if (! $result) {
             throw new PrestaShopException("Comparision result not found. Please reload the page and try again");
         }
+        $ignored = Tools::getValue('ignored');
+        if ($ignored && !is_array($ignored)) {
+            $ignored = [ $ignored ];
+        }
+        if (is_array($ignored)) {
+            foreach ($ignored as $file) {
+                unset($result['changeSet']['change'][$file]);
+                unset($result['changeSet']['add'][$file]);
+                unset($result['changeSet']['remove'][$file]);
+            }
+        }
         $targetFileList = $comparator->getFileList(
             $compareProcessId,
             $result['targetRevision'],
@@ -977,6 +991,50 @@ class AdminCoreUpdaterController extends ModuleAdminController
             'progress' => 0.0,
             'step' => $updater->describeCurrentStep($processId),
         ];
+    }
+
+    /**
+     * Returns unified diff between local file and target file
+     *
+     * @return string
+     * @throws PrestaShopException
+     * @throws ThirtybeesApiException
+     */
+    protected function getFileDiff()
+    {
+        $file = Tools::getValue('file');
+        $compareProcessId = Tools::getValue('compareProcessId');
+        if (!$file || !$compareProcessId) {
+            throw new PrestaShopException('Missing parameters');
+        }
+        $comparator = $this->factory->getComparator();
+        $result = $comparator->getResult($compareProcessId);
+        if (!$result) {
+            throw new PrestaShopException('Comparision result not found. Please reload the page and try again');
+        }
+        $php = $result['targetPHPVersion'];
+        $revision = $result['targetRevision'];
+        $api = $this->factory->getApi();
+        $tmpArchive = tempnam(_PS_CACHE_DIR_, 'cu');
+        $remotePath = preg_replace('#^' . preg_quote(_PS_ADMIN_DIR_, '#') . '/#', 'admin/', $file);
+        $api->downloadFiles($php, $revision, [ $remotePath ], $tmpArchive);
+        $tmpDir = _PS_CACHE_DIR_ . 'cu_diff_' . uniqid();
+        $archive = new Archive_Tar($tmpArchive, 'gz');
+        $archive->extract($tmpDir);
+        @unlink($tmpArchive);
+        $remoteFile = $tmpDir . '/' . $remotePath;
+        $remoteContent = file_exists($remoteFile) ? file_get_contents($remoteFile) : '';
+        $localPath = _PS_ROOT_DIR_ . '/' . $file;
+        $localContent = file_exists($localPath) ? file_get_contents($localPath) : '';
+        $old = tempnam($tmpDir, 'old');
+        $new = tempnam($tmpDir, 'new');
+        file_put_contents($old, $localContent);
+        file_put_contents($new, $remoteContent);
+        $diff = shell_exec('diff -u ' . escapeshellarg($old) . ' ' . escapeshellarg($new));
+        @unlink($old);
+        @unlink($new);
+        Tools::deleteDirectory($tmpDir);
+        return $diff ? $diff : '';
     }
 
     /**

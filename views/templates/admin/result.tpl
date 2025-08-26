@@ -115,6 +115,10 @@
             {if $modified}
               <span class="badge badge-warning">{l s='modified' mod='coreupdater'}</span>
             {/if}
+            <label class="checkbox-inline">
+              <input type="checkbox" class="ignore-file" data-file="{$file|escape:'html'}" /> {l s='Ignore' mod='coreupdater'}
+            </label>
+            <button type="button" class="btn btn-default btn-xs preview-file" data-file="{$file|escape:'html'}">{l s='Preview' mod='coreupdater'}</button>
           </li>
         {/foreach}
       </ul>
@@ -131,6 +135,10 @@
             {if $modified}
               <span class="badge badge-warning">{l s='modified' mod='coreupdater'}</span>
             {/if}
+            <label class="checkbox-inline">
+              <input type="checkbox" class="ignore-file" data-file="{$file|escape:'html'}" /> {l s='Ignore' mod='coreupdater'}
+            </label>
+            <button type="button" class="btn btn-default btn-xs preview-file" data-file="{$file|escape:'html'}">{l s='Preview' mod='coreupdater'}</button>
           </li>
         {/foreach}
       </ul>
@@ -147,6 +155,10 @@
             {if $modified}
               <span class="badge badge-warning">{l s='modified' mod='coreupdater'}</span>
             {/if}
+            <label class="checkbox-inline">
+              <input type="checkbox" class="ignore-file" data-file="{$file|escape:'html'}" /> {l s='Ignore' mod='coreupdater'}
+            </label>
+            <button type="button" class="btn btn-default btn-xs preview-file" data-file="{$file|escape:'html'}">{l s='Preview' mod='coreupdater'}</button>
           </li>
         {/foreach}
       </ul>
@@ -162,8 +174,30 @@
     </div>
     <script type="application/javascript">
       $("#update-button").click(function() {
-        coreUpdater.update("{$compareProcessId}");
+        var ignored = [];
+        $(".ignore-file:checked").each(function() {
+          ignored.push($(this).data('file'));
+        });
+        coreUpdater.update("{$compareProcessId}", ignored);
+      });
+      $(".preview-file").click(function() {
+        coreUpdater.preview("{$compareProcessId}", $(this).data('file'));
       });
     </script>
   {/if}
+
+  <div class="modal fade" id="file-diff-modal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <button type="button" class="close" data-dismiss="modal" aria-label="{l s='Close' mod='coreupdater'}"><span aria-hidden="true">&times;</span></button>
+          <h4 class="modal-title">{l s='File differences' mod='coreupdater'}</h4>
+        </div>
+        <div class="modal-body">
+          <pre id="file-diff-content"></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
 </div>
