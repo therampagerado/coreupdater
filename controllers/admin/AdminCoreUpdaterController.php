@@ -49,6 +49,7 @@ class AdminCoreUpdaterController extends ModuleAdminController
     const ACTION_GET_DATABASE_DIFFERENCES = "GET_DATABASE_DIFFERENCES";
     const ACTION_APPLY_DATABASE_FIX = 'APPLY_DATABASE_FIX';
     const ACTION_RUN_POST_UPDATE_PROCESSES = 'RUN_POST_UPDATE_PROCESSES';
+    const ACTION_GET_FILE_DIFF = 'GET_FILE_DIFF';
 
     const SELECTED_PROCESS_MIGRATE_DB = 'SELECTED_PROCESS_MIGRATE_DB';
     const SELECTED_PROCESS_INITIALIZATION_CALLBACK = 'SELECTED_PROCESS_INITIALIZATION_CALLBACK';
@@ -777,6 +778,8 @@ class AdminCoreUpdaterController extends ModuleAdminController
                 return $this->getDatabaseDifferences();
             case static::ACTION_APPLY_DATABASE_FIX:
                 return $this->applyDatabaseFix(Tools::getValue('ids'));
+            case static::ACTION_GET_FILE_DIFF:
+                return $this->getFileDiff();
             default:
                 throw new PrestaShopException("Invalid action: $action");
         }
@@ -950,6 +953,14 @@ class AdminCoreUpdaterController extends ModuleAdminController
     protected function initUpdateProcess()
     {
         $compareProcessId = Tools::getValue('compareProcessId');
+        $ignored = Tools::getValue('ignore');
+        $ignoredFiles = [];
+        if ($ignored) {
+            $decoded = json_decode($ignored, true);
+            if (is_array($decoded)) {
+                $ignoredFiles = $decoded;
+            }
+        }
         $comparator = $this->factory->getComparator();
         $result = $comparator->getResult($compareProcessId);
         if (! $result) {
@@ -960,6 +971,16 @@ class AdminCoreUpdaterController extends ModuleAdminController
             $result['targetRevision'],
             $result['targetPHPVersion']
         );
+
+        if ($ignoredFiles) {
+            foreach ($ignoredFiles as $file) {
+                unset($result['changeSet']['change'][$file]);
+                unset($result['changeSet']['add'][$file]);
+                unset($result['changeSet']['remove'][$file]);
+                unset($targetFileList[$file]);
+            }
+        }
+
         $employeeId = (int)$this->context->employee->id;
         $updater = $this->factory->getUpdater();
         $processId = $updater->startProcess($employeeId, [
@@ -977,6 +998,90 @@ class AdminCoreUpdaterController extends ModuleAdminController
             'progress' => 0.0,
             'step' => $updater->describeCurrentStep($processId),
         ];
+    }
+
+    /**
+     * Returns diff between local and target version of file
+     *
+     * @return array
+     * @throws PrestaShopException
+     */
+    protected function getFileDiff()
+    {
+        $compareProcessId = Tools::getValue('compareProcessId');
+        $file = Tools::getValue('file');
+        $comparator = $this->factory->getComparator();
+        $result = $comparator->getResult($compareProcessId);
+        if (! $result) {
+            throw new PrestaShopException('Comparision result not found');
+        }
+
+        $changeSet = $result['changeSet'];
+        if (!(isset($changeSet['change'][$file]) || isset($changeSet['add'][$file]) || isset($changeSet['remove'][$file]))) {
+            throw new PrestaShopException('File not found in change set');
+        }
+
+        $localPath = _PS_ROOT_DIR_ . '/' . $file;
+        $local = @is_file($localPath) ? file_get_contents($localPath) : '';
+        $remote = '';
+        if (!isset($changeSet['remove'][$file])) {
+            $apiPath = preg_replace('#^' . preg_quote(_PS_ADMIN_DIR_ . '/', '#') . '#', 'admin/', $file);
+            $api = $this->factory->getApi();
+            $tmpArchive = tempnam(_PS_CACHE_DIR_, 'cu');
+            $api->downloadFiles($result['targetPHPVersion'], $result['targetRevision'], [$apiPath], $tmpArchive);
+            $tmpDir = tempnam(_PS_CACHE_DIR_, 'cu');
+            @unlink($tmpDir);
+            @mkdir($tmpDir, 0777, true);
+            $archive = new Archive_Tar($tmpArchive, 'gz');
+            $archive->extract($tmpDir);
+            @unlink($tmpArchive);
+            $remotePath = $tmpDir . '/' . $apiPath;
+            if (is_file($remotePath)) {
+                $remote = file_get_contents($remotePath);
+            }
+            Tools::deleteDirectory($tmpDir);
+        }
+
+        $diff = $this->generateDiff($local, $remote);
+
+        return [ 'diff' => $diff ];
+    }
+
+    /**
+     * Creates simple line based diff
+     *
+     * @param string $old
+     * @param string $new
+     * @return string
+     */
+    protected function generateDiff($old, $new)
+    {
+        if (function_exists('xdiff_string_diff')) {
+            $diff = xdiff_string_diff($old, $new, 1);
+            if ($diff !== false) {
+                return $diff;
+            }
+        }
+
+        $oldLines = explode("\n", $old);
+        $newLines = explode("\n", $new);
+        $max = max(count($oldLines), count($newLines));
+        $out = [];
+        for ($i = 0; $i < $max; $i++) {
+            $o = array_key_exists($i, $oldLines) ? $oldLines[$i] : null;
+            $n = array_key_exists($i, $newLines) ? $newLines[$i] : null;
+            if ($o === $n) {
+                $out[] = ' ' . $o;
+            } else {
+                if ($o !== null) {
+                    $out[] = '-' . $o;
+                }
+                if ($n !== null) {
+                    $out[] = '+' . $n;
+                }
+            }
+        }
+        return implode("\n", $out);
     }
 
     /**

@@ -15,7 +15,7 @@
  * @copyright 2017-2024 thirty bees
  * @license   Academic Free License (AFL 3.0)
  *}
-<div class="panel" id="process-result">
+<div class="panel" id="process-result" data-process-id="{$compareProcessId}">
   <div class="panel-heading">
     {if !$edits && !$changes}
       {l s='Your system is updated' mod='coreupdater'}
@@ -115,6 +115,10 @@
             {if $modified}
               <span class="badge badge-warning">{l s='modified' mod='coreupdater'}</span>
             {/if}
+            <span class="file-actions">
+              <a href="#" class="preview-file" data-file="{$file|escape:'html'}">{l s='Preview' mod='coreupdater'}</a>
+              <label><input type="checkbox" class="ignore-file" data-file="{$file|escape:'html'}"> {l s='Ignore' mod='coreupdater'}</label>
+            </span>
           </li>
         {/foreach}
       </ul>
@@ -131,6 +135,10 @@
             {if $modified}
               <span class="badge badge-warning">{l s='modified' mod='coreupdater'}</span>
             {/if}
+            <span class="file-actions">
+              <a href="#" class="preview-file" data-file="{$file|escape:'html'}">{l s='Preview' mod='coreupdater'}</a>
+              <label><input type="checkbox" class="ignore-file" data-file="{$file|escape:'html'}"> {l s='Ignore' mod='coreupdater'}</label>
+            </span>
           </li>
         {/foreach}
       </ul>
@@ -147,6 +155,10 @@
             {if $modified}
               <span class="badge badge-warning">{l s='modified' mod='coreupdater'}</span>
             {/if}
+            <span class="file-actions">
+              <a href="#" class="preview-file" data-file="{$file|escape:'html'}">{l s='Preview' mod='coreupdater'}</a>
+              <label><input type="checkbox" class="ignore-file" data-file="{$file|escape:'html'}"> {l s='Ignore' mod='coreupdater'}</label>
+            </span>
           </li>
         {/foreach}
       </ul>
@@ -166,4 +178,18 @@
       });
     </script>
   {/if}
+</div>
+
+<div id="diff-modal" class="modal fade" tabindex="-1" role="dialog">
+  <div class="modal-dialog modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-label="{l s='Close' mod='coreupdater'}"><span aria-hidden="true">&times;</span></button>
+        <h4 class="modal-title">{l s='Preview changes' mod='coreupdater'}</h4>
+      </div>
+      <div class="modal-body">
+        <pre id="diff-content" class="diff"></pre>
+      </div>
+    </div>
+  </div>
 </div>

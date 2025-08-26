@@ -176,10 +176,37 @@ window.initializeCoreUpdater = function(translations) {
 
   var update = function(compareProcessId) {
     initProgress(translations.UPDATE, translations.UPDATE_DESCRIPTION);
-    executeAction('INIT_UPDATE', { compareProcessId: compareProcessId })
+    var ignored = [];
+    $('.ignore-file:checked').each(function () {
+      ignored.push($(this).data('file'));
+    });
+    executeAction('INIT_UPDATE', { compareProcessId: compareProcessId, ignore: JSON.stringify(ignored) })
         .then(runUpdate)
         .catch(displayError);
   };
+
+  var showDiff = function(file, diff) {
+    var html = diff.split('\n').map(function(line) {
+      var cls = '';
+      if (line.indexOf('+') === 0) { cls = 'diff-added'; }
+      else if (line.indexOf('-') === 0) { cls = 'diff-removed'; }
+      else if (line.indexOf('@@') === 0) { cls = 'diff-hunk'; }
+      return '<div class="'+cls+'">'+$('<div>').text(line).html()+'</div>';
+    }).join('');
+    var $modal = $('#diff-modal');
+    $modal.find('.modal-title').text(file);
+    $modal.find('#diff-content').html(html);
+    $modal.modal('show');
+  };
+
+  $(document).on('click', '.preview-file', function(e) {
+    e.preventDefault();
+    var file = $(this).data('file');
+    var processId = $('#process-result').data('process-id');
+    executeAction('GET_FILE_DIFF', { file: file, compareProcessId: processId })
+      .then(function(result) { showDiff(file, result.diff); })
+      .catch(displayError);
+  });
 
   var checkDatabase = function() {
     document.getElementById('db-changes').className = 'status-running';
