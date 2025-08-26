@@ -71,6 +71,9 @@
       <p>
         {l s='Oh, bummer. Some of thirty bees core files have been [1]modified[/1]. That makes it a little bit harder to update your store.' tags=['<b>'] mod='coreupdater'}
       </p>
+      {if $developerMode}
+      <p>{l s='You are using Developer mode and few functions are visible. Use them at your own risk and only if you know what they do.' mod='coreupdater'}</p>
+      {/if}
       <p>
         {l s='Modification of core files is not recommended. It makes it very hard to keep your store updated.' tags=['<b>'] mod='coreupdater'}
         {l s='You should [1]extract[/1] your modifications to overrides or to module. If unsure how to do that, please contact [2]thirty bees support[/2], we can help.' tags=['<b>', '<a href="https://thirtybees.com/contact/" target="_blank">'] mod='coreupdater'}
@@ -115,6 +118,10 @@
             {if $modified}
               <span class="badge badge-warning">{l s='modified' mod='coreupdater'}</span>
             {/if}
+            {if $developerMode}
+              <a href="#" class="preview-file" data-file="{$file|escape:'html'}">{l s='Preview' mod='coreupdater'}</a>
+              <label class="ignore-label"><input type="checkbox" class="ignore-file" data-file="{$file|escape:'html'}"> {l s='Ignore file' mod='coreupdater'}</label>
+            {/if}
           </li>
         {/foreach}
       </ul>
@@ -130,6 +137,10 @@
             <code>{$file|escape:'html'}</code>
             {if $modified}
               <span class="badge badge-warning">{l s='modified' mod='coreupdater'}</span>
+            {/if}
+            {if $developerMode}
+              <a href="#" class="preview-file" data-file="{$file|escape:'html'}">{l s='Preview' mod='coreupdater'}</a>
+              <label class="ignore-label"><input type="checkbox" class="ignore-file" data-file="{$file|escape:'html'}"> {l s='Ignore file' mod='coreupdater'}</label>
             {/if}
           </li>
         {/foreach}
@@ -147,6 +158,10 @@
             {if $modified}
               <span class="badge badge-warning">{l s='modified' mod='coreupdater'}</span>
             {/if}
+            {if $developerMode}
+              <a href="#" class="preview-file" data-file="{$file|escape:'html'}">{l s='Preview' mod='coreupdater'}</a>
+              <label class="ignore-label"><input type="checkbox" class="ignore-file" data-file="{$file|escape:'html'}"> {l s='Ignore file' mod='coreupdater'}</label>
+            {/if}
           </li>
         {/foreach}
       </ul>
@@ -160,10 +175,60 @@
         {l s='Update store' mod='coreupdater'}
       </button>
     </div>
-    <script type="application/javascript">
-      $("#update-button").click(function() {
-        coreUpdater.update("{$compareProcessId}");
-      });
-    </script>
   {/if}
 </div>
+
+{if $developerMode}
+<div id="file-preview-modal" class="modal fade" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+        <h4 class="modal-title">{l s='File preview' mod='coreupdater'}</h4>
+      </div>
+      <div class="modal-body">
+        <pre id="file-preview-diff" class="diff-content"></pre>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-default" data-dismiss="modal">{l s='Close' mod='coreupdater'}</button>
+      </div>
+  </div>
+  </div>
+</div>
+{/if}
+
+<script type="application/javascript">
+  var compareProcessId = "{$compareProcessId}";
+  {if $developerMode}
+  {literal}
+  var escapeHtml = function(str) {
+    return str.replace(/[&<>]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c]; });
+  };
+  $(".preview-file").click(function(e){
+    e.preventDefault();
+    var file = $(this).data('file');
+    coreUpdater.preview(compareProcessId, file).then(function(res){
+      var diff = atob(res.diff || '');
+      var html = diff.split('\n').map(function(line){
+        var cls = '';
+        if (line.startsWith('+')) cls = 'diff-add';
+        else if (line.startsWith('-')) cls = 'diff-del';
+        else if (line.startsWith('@@')) cls = 'diff-hunk';
+        return '<span class="'+cls+'">'+escapeHtml(line)+'</span>';
+      }).join('\n');
+      $('#file-preview-diff').html(html);
+      $('#file-preview-modal').modal('show');
+    }).catch(function(err){
+      alert(err.message || err);
+    });
+  });
+  {/literal}
+  {/if}
+  {literal}
+  $("#update-button").click(function(){
+    var ignore = [];
+    $('.ignore-file:checked').each(function(){ ignore.push($(this).data('file')); });
+    coreUpdater.update(compareProcessId, ignore);
+  });
+  {/literal}
+</script>
