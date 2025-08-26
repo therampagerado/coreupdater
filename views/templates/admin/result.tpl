@@ -111,7 +111,11 @@
       <ul class="file-list">
         {foreach from=$changeSet['change'] key='file' item='modified'}
           <li>
-            <code>{$file|escape:'html'}</code>
+            <label>
+              <input type="checkbox" class="file-ignore" data-file="{$file|escape:'html'}"/>
+              <code>{$file|escape:'html'}</code>
+            </label>
+            <a href="#" class="btn btn-default btn-xs preview-file" data-file="{$file|escape:'html'}">{l s='Preview' mod='coreupdater'}</a>
             {if $modified}
               <span class="badge badge-warning">{l s='modified' mod='coreupdater'}</span>
             {/if}
@@ -127,7 +131,11 @@
       <ul class="file-list">
         {foreach from=$changeSet['add'] key='file' item='modified'}
           <li>
-            <code>{$file|escape:'html'}</code>
+            <label>
+              <input type="checkbox" class="file-ignore" data-file="{$file|escape:'html'}"/>
+              <code>{$file|escape:'html'}</code>
+            </label>
+            <a href="#" class="btn btn-default btn-xs preview-file" data-file="{$file|escape:'html'}">{l s='Preview' mod='coreupdater'}</a>
             {if $modified}
               <span class="badge badge-warning">{l s='modified' mod='coreupdater'}</span>
             {/if}
@@ -143,7 +151,10 @@
       <ul class="file-list">
         {foreach from=$changeSet['remove'] key='file' item='modified'}
           <li>
-            <code>{$file|escape:'html'}</code>
+            <label>
+              <input type="checkbox" class="file-ignore" data-file="{$file|escape:'html'}"/>
+              <code>{$file|escape:'html'}</code>
+            </label>
             {if $modified}
               <span class="badge badge-warning">{l s='modified' mod='coreupdater'}</span>
             {/if}
@@ -161,9 +172,42 @@
       </button>
     </div>
     <script type="application/javascript">
-      $("#update-button").click(function() {
-        coreUpdater.update("{$compareProcessId}");
+      $(function() {
+        $("#update-button").click(function() {
+          var ignored = [];
+          $(".file-ignore:checked").each(function() {
+            ignored.push($(this).data('file'));
+          });
+          coreUpdater.update("{$compareProcessId}", ignored);
+        });
+        $(".preview-file").click(function(e) {
+          e.preventDefault();
+          coreUpdater.preview("{$compareProcessId}", $(this).data('file'));
+        });
       });
     </script>
   {/if}
+</div>
+
+<div class="modal fade" id="previewModal" tabindex="-1" role="dialog">
+  <div class="modal-dialog modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+        <h4 class="modal-title">{l s='File preview' mod='coreupdater'}</h4>
+      </div>
+      <div class="modal-body">
+        <div class="row">
+          <div class="col-sm-6">
+            <h5>{l s='Current file' mod='coreupdater'}</h5>
+            <pre id="preview-local"></pre>
+          </div>
+          <div class="col-sm-6">
+            <h5>{l s='New file' mod='coreupdater'}</h5>
+            <pre id="preview-remote"></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>

@@ -174,10 +174,21 @@ window.initializeCoreUpdater = function(translations) {
     incrementProcess('UPDATE', process, endProgress);
   };
 
-  var update = function(compareProcessId) {
+  var update = function(compareProcessId, ignored) {
     initProgress(translations.UPDATE, translations.UPDATE_DESCRIPTION);
-    executeAction('INIT_UPDATE', { compareProcessId: compareProcessId })
+    executeAction('INIT_UPDATE', { compareProcessId: compareProcessId, ignored: ignored })
         .then(runUpdate)
+        .catch(displayError);
+  };
+
+  var preview = function(compareProcessId, file) {
+    executeAction('PREVIEW_FILE', { compareProcessId: compareProcessId, file: file })
+        .then(function(result) {
+          $('#previewModal .modal-title').text(result.file);
+          $('#preview-local').text(atob(result.local));
+          $('#preview-remote').text(atob(result.remote));
+          $('#previewModal').modal('show');
+        })
         .catch(displayError);
   };
 
@@ -282,6 +293,7 @@ window.initializeCoreUpdater = function(translations) {
     compare: compare,
     update: update,
     checkDatabase: checkDatabase,
+    preview: preview,
   }
 };
 
