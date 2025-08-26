@@ -96,3 +96,19 @@
     top: 50%;
     left: 50%;
 }
+
+/* File preview diff styles */
+#file-preview-diff {
+    max-height: 70vh;
+    overflow: auto;
+    background: #f8f8f8;
+    padding: 10px;
+}
+#file-preview-diff .diff-add { background-color: #e6ffed; }
+#file-preview-diff .diff-del { background-color: #ffeef0; }
+#file-preview-diff .diff-hunk { background-color: #f1f8ff; }
+
+.ignore-label {
+    font-weight: normal;
+    margin-left: 5px;
+}

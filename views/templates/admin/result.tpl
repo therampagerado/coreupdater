@@ -189,25 +189,15 @@
       <div class="modal-footer">
         <button type="button" class="btn btn-default" data-dismiss="modal">{l s='Close' mod='coreupdater'}</button>
       </div>
-    </div>
+  </div>
   </div>
 </div>
-<style>
-  #file-preview-diff {
-    max-height: 70vh;
-    overflow:auto;
-    background:#f8f8f8;
-    padding:10px;
-  }
-  #file-preview-diff .diff-add {background-color:#e6ffed;}
-  #file-preview-diff .diff-del {background-color:#ffeef0;}
-  #file-preview-diff .diff-hunk {background-color:#f1f8ff;}
-</style>
 {/if}
 
 <script type="application/javascript">
   var compareProcessId = "{$compareProcessId}";
   {if $developerMode}
+  {literal}
   var escapeHtml = function(str) {
     return str.replace(/[&<>]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c]; });
   };
@@ -229,10 +219,13 @@
       alert(err.message || err);
     });
   });
+  {/literal}
   {/if}
+  {literal}
   $("#update-button").click(function(){
     var ignore = [];
     $('.ignore-file:checked').each(function(){ ignore.push($(this).data('file')); });
     coreUpdater.update(compareProcessId, ignore);
   });
+  {/literal}
 </script>
