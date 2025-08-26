@@ -938,7 +938,8 @@ class AdminCoreUpdaterController extends ModuleAdminController
             'versionType' => $versionType,
             'installedRevision' => $installedRevision,
             'targetRevision' => $targetRevision,
-            'changeSet' => $changeSet
+            'changeSet' => $changeSet,
+            'developerMode' => Settings::isDeveloperMode(),
         ]);
 
         return [
@@ -958,15 +959,18 @@ class AdminCoreUpdaterController extends ModuleAdminController
         if (! $result) {
             throw new PrestaShopException("Comparision result not found. Please reload the page and try again");
         }
-        $ignored = Tools::getValue('ignoreFiles');
-        if ($ignored && !is_array($ignored)) {
-            $ignored = [$ignored];
-        }
-        if ($ignored) {
-            foreach ($ignored as $path) {
-                foreach (['change','add','remove'] as $type) {
-                    if (isset($result['changeSet'][$type][$path])) {
-                        unset($result['changeSet'][$type][$path]);
+        $ignored = null;
+        if (Settings::isDeveloperMode()) {
+            $ignored = Tools::getValue('ignoreFiles');
+            if ($ignored && !is_array($ignored)) {
+                $ignored = [$ignored];
+            }
+            if ($ignored) {
+                foreach ($ignored as $path) {
+                    foreach (['change','add','remove'] as $type) {
+                        if (isset($result['changeSet'][$type][$path])) {
+                            unset($result['changeSet'][$type][$path]);
+                        }
                     }
                 }
             }
@@ -1004,6 +1008,9 @@ class AdminCoreUpdaterController extends ModuleAdminController
      */
     protected function previewFile()
     {
+        if (!Settings::isDeveloperMode()) {
+            throw new PrestaShopException('Developer mode is not enabled');
+        }
         $compareProcessId = Tools::getValue('compareProcessId');
         $file = Tools::getValue('file');
         if (!$file) {
@@ -1032,9 +1039,17 @@ class AdminCoreUpdaterController extends ModuleAdminController
         $localPath = _PS_ROOT_DIR_ . '/' . $this->fixAdminDirectory($file);
         $localContent = file_exists($localPath) ? file_get_contents($localPath) : '';
 
+        $tmpRemote = tempnam(_PS_CACHE_DIR_, 'cu');
+        $tmpLocal = tempnam(_PS_CACHE_DIR_, 'cu');
+        file_put_contents($tmpRemote, $remoteContent);
+        file_put_contents($tmpLocal, $localContent);
+        $cmd = sprintf('diff -u %s %s 2>&1', escapeshellarg($tmpLocal), escapeshellarg($tmpRemote));
+        $diff = shell_exec($cmd);
+        @unlink($tmpRemote);
+        @unlink($tmpLocal);
+
         return [
-            'local' => $localContent,
-            'remote' => $remoteContent,
+            'diff' => base64_encode($diff === null ? '' : $diff),
         ];
     }
 

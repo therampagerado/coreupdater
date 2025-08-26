@@ -115,8 +115,10 @@
             {if $modified}
               <span class="badge badge-warning">{l s='modified' mod='coreupdater'}</span>
             {/if}
-            <a href="#" class="preview-file" data-file="{$file|escape:'html'}">{l s='Preview' mod='coreupdater'}</a>
-            <label class="ignore-label"><input type="checkbox" class="ignore-file" data-file="{$file|escape:'html'}"> {l s='Ignore' mod='coreupdater'}</label>
+            {if $developerMode}
+              <a href="#" class="preview-file" data-file="{$file|escape:'html'}">{l s='Preview' mod='coreupdater'}</a>
+              <label class="ignore-label"><input type="checkbox" class="ignore-file" data-file="{$file|escape:'html'}"> {l s='Ignore file' mod='coreupdater'}</label>
+            {/if}
           </li>
         {/foreach}
       </ul>
@@ -133,8 +135,10 @@
             {if $modified}
               <span class="badge badge-warning">{l s='modified' mod='coreupdater'}</span>
             {/if}
-            <a href="#" class="preview-file" data-file="{$file|escape:'html'}">{l s='Preview' mod='coreupdater'}</a>
-            <label class="ignore-label"><input type="checkbox" class="ignore-file" data-file="{$file|escape:'html'}"> {l s='Ignore' mod='coreupdater'}</label>
+            {if $developerMode}
+              <a href="#" class="preview-file" data-file="{$file|escape:'html'}">{l s='Preview' mod='coreupdater'}</a>
+              <label class="ignore-label"><input type="checkbox" class="ignore-file" data-file="{$file|escape:'html'}"> {l s='Ignore file' mod='coreupdater'}</label>
+            {/if}
           </li>
         {/foreach}
       </ul>
@@ -151,8 +155,10 @@
             {if $modified}
               <span class="badge badge-warning">{l s='modified' mod='coreupdater'}</span>
             {/if}
-            <a href="#" class="preview-file" data-file="{$file|escape:'html'}">{l s='Preview' mod='coreupdater'}</a>
-            <label class="ignore-label"><input type="checkbox" class="ignore-file" data-file="{$file|escape:'html'}"> {l s='Ignore' mod='coreupdater'}</label>
+            {if $developerMode}
+              <a href="#" class="preview-file" data-file="{$file|escape:'html'}">{l s='Preview' mod='coreupdater'}</a>
+              <label class="ignore-label"><input type="checkbox" class="ignore-file" data-file="{$file|escape:'html'}"> {l s='Ignore file' mod='coreupdater'}</label>
+            {/if}
           </li>
         {/foreach}
       </ul>
@@ -169,6 +175,7 @@
   {/if}
 </div>
 
+{if $developerMode}
 <div id="file-preview-modal" class="modal fade" tabindex="-1">
   <div class="modal-dialog modal-lg">
     <div class="modal-content">
@@ -177,16 +184,7 @@
         <h4 class="modal-title">{l s='File preview' mod='coreupdater'}</h4>
       </div>
       <div class="modal-body">
-        <div class="row">
-          <div class="col-sm-6">
-            <h4>{l s='Current file' mod='coreupdater'}</h4>
-            <pre id="file-preview-local"></pre>
-          </div>
-          <div class="col-sm-6">
-            <h4>{l s='New file' mod='coreupdater'}</h4>
-            <pre id="file-preview-remote"></pre>
-          </div>
-        </div>
+        <pre id="file-preview-diff" class="diff-content"></pre>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-default" data-dismiss="modal">{l s='Close' mod='coreupdater'}</button>
@@ -194,20 +192,44 @@
     </div>
   </div>
 </div>
+<style>
+  #file-preview-diff {
+    max-height: 70vh;
+    overflow:auto;
+    background:#f8f8f8;
+    padding:10px;
+  }
+  #file-preview-diff .diff-add {background-color:#e6ffed;}
+  #file-preview-diff .diff-del {background-color:#ffeef0;}
+  #file-preview-diff .diff-hunk {background-color:#f1f8ff;}
+</style>
+{/if}
 
 <script type="application/javascript">
   var compareProcessId = "{$compareProcessId}";
+  {if $developerMode}
+  var escapeHtml = function(str) {
+    return str.replace(/[&<>]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c]; });
+  };
   $(".preview-file").click(function(e){
     e.preventDefault();
     var file = $(this).data('file');
     coreUpdater.preview(compareProcessId, file).then(function(res){
-      $('#file-preview-local').text(res.local);
-      $('#file-preview-remote').text(res.remote);
+      var diff = atob(res.diff || '');
+      var html = diff.split('\n').map(function(line){
+        var cls = '';
+        if (line.startsWith('+')) cls = 'diff-add';
+        else if (line.startsWith('-')) cls = 'diff-del';
+        else if (line.startsWith('@@')) cls = 'diff-hunk';
+        return '<span class="'+cls+'">'+escapeHtml(line)+'</span>';
+      }).join('\n');
+      $('#file-preview-diff').html(html);
       $('#file-preview-modal').modal('show');
     }).catch(function(err){
       alert(err.message || err);
     });
   });
+  {/if}
   $("#update-button").click(function(){
     var ignore = [];
     $('.ignore-file:checked').each(function(){ ignore.push($(this).data('file')); });
