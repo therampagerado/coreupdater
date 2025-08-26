@@ -49,6 +49,7 @@ class AdminCoreUpdaterController extends ModuleAdminController
     const ACTION_GET_DATABASE_DIFFERENCES = "GET_DATABASE_DIFFERENCES";
     const ACTION_APPLY_DATABASE_FIX = 'APPLY_DATABASE_FIX';
     const ACTION_RUN_POST_UPDATE_PROCESSES = 'RUN_POST_UPDATE_PROCESSES';
+    const ACTION_PREVIEW_FILE = 'PREVIEW_FILE';
 
     const SELECTED_PROCESS_MIGRATE_DB = 'SELECTED_PROCESS_MIGRATE_DB';
     const SELECTED_PROCESS_INITIALIZATION_CALLBACK = 'SELECTED_PROCESS_INITIALIZATION_CALLBACK';
@@ -777,6 +778,8 @@ class AdminCoreUpdaterController extends ModuleAdminController
                 return $this->getDatabaseDifferences();
             case static::ACTION_APPLY_DATABASE_FIX:
                 return $this->applyDatabaseFix(Tools::getValue('ids'));
+            case static::ACTION_PREVIEW_FILE:
+                return $this->previewFile();
             default:
                 throw new PrestaShopException("Invalid action: $action");
         }
@@ -955,6 +958,19 @@ class AdminCoreUpdaterController extends ModuleAdminController
         if (! $result) {
             throw new PrestaShopException("Comparision result not found. Please reload the page and try again");
         }
+        $ignored = Tools::getValue('ignoreFiles');
+        if ($ignored && !is_array($ignored)) {
+            $ignored = [$ignored];
+        }
+        if ($ignored) {
+            foreach ($ignored as $path) {
+                foreach (['change','add','remove'] as $type) {
+                    if (isset($result['changeSet'][$type][$path])) {
+                        unset($result['changeSet'][$type][$path]);
+                    }
+                }
+            }
+        }
         $targetFileList = $comparator->getFileList(
             $compareProcessId,
             $result['targetRevision'],
@@ -977,6 +993,61 @@ class AdminCoreUpdaterController extends ModuleAdminController
             'progress' => 0.0,
             'step' => $updater->describeCurrentStep($processId),
         ];
+    }
+
+    /**
+     * Returns preview of given file
+     *
+     * @return array
+     *
+     * @throws PrestaShopException
+     */
+    protected function previewFile()
+    {
+        $compareProcessId = Tools::getValue('compareProcessId');
+        $file = Tools::getValue('file');
+        if (!$file) {
+            throw new PrestaShopException('File not specified');
+        }
+        $comparator = $this->factory->getComparator();
+        $result = $comparator->getResult($compareProcessId);
+        if (!$result) {
+            throw new PrestaShopException('Comparision result not found. Please reload the page and try again');
+        }
+        $apiPath = preg_replace('#^' . preg_quote(basename(_PS_ADMIN_DIR_) . '/') . '#', 'admin/', $file);
+        $tmp = tempnam(_PS_CACHE_DIR_, 'cu');
+        try {
+            $this->factory->getApi()->downloadFiles(
+                $result['targetPHPVersion'],
+                $result['targetRevision'],
+                [ $apiPath ],
+                $tmp
+            );
+            $tar = new Archive_Tar($tmp);
+            $remoteContent = $tar->extractInString($apiPath);
+        } finally {
+            @unlink($tmp);
+        }
+
+        $localPath = _PS_ROOT_DIR_ . '/' . $this->fixAdminDirectory($file);
+        $localContent = file_exists($localPath) ? file_get_contents($localPath) : '';
+
+        return [
+            'local' => $localContent,
+            'remote' => $remoteContent,
+        ];
+    }
+
+    /**
+     * Replace admin directory placeholder with real directory name
+     *
+     * @param string $file
+     * @return string
+     */
+    protected function fixAdminDirectory($file)
+    {
+        $adminDir = basename(_PS_ADMIN_DIR_);
+        return preg_replace('#^admin/#', $adminDir . '/', $file);
     }
 
     /**
