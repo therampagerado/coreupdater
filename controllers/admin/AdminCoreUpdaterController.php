@@ -22,6 +22,7 @@ use CoreUpdater\Api\ThirtybeesApiException;
 use CoreUpdater\DatabaseSchemaComparator;
 use CoreUpdater\Factory;
 use CoreUpdater\InformationSchemaBuilder;
+use CoreUpdater\MergeService;
 use CoreUpdater\ObjectModelSchemaBuilder;
 use CoreUpdater\Process\ProcessingState;
 use CoreUpdater\Process\Processor;
@@ -745,7 +746,7 @@ class AdminCoreUpdaterController extends ModuleAdminController
                 'success' => true,
                 'data' => $this->processAction($action)
             ]));
-        } catch (Exception $e) {
+        } catch (\Throwable $e) {
             $logger->error('Failed to process action ' . $action . ': ' . $e->getMessage() . ': ' . $e->getTraceAsString());
             die(json_encode([
                 'success' => false,
@@ -914,6 +915,7 @@ class AdminCoreUpdaterController extends ModuleAdminController
     public function createCompareResult($compareProcessId, $result, $installedRevision)
     {
         $changeSet = $result['changeSet'];
+        $previewableFiles = $this->buildPreviewableFilesMap($changeSet);
         $targetRevision = $result['targetRevision'];
         $sameRevision = $targetRevision == $installedRevision;
         $changes = 0;
@@ -939,6 +941,7 @@ class AdminCoreUpdaterController extends ModuleAdminController
             'installedRevision' => $installedRevision,
             'targetRevision' => $targetRevision,
             'changeSet' => $changeSet,
+            'previewableFiles' => $previewableFiles,
             'developerMode' => Settings::isDeveloperMode(),
         ]);
 
@@ -975,6 +978,7 @@ class AdminCoreUpdaterController extends ModuleAdminController
                 }
             }
         }
+        $mergedFiles = $this->parseMergedFiles(Tools::getValue('mergedFiles'), $result['changeSet']);
         $targetFileList = $comparator->getFileList(
             $compareProcessId,
             $result['targetRevision'],
@@ -989,7 +993,8 @@ class AdminCoreUpdaterController extends ModuleAdminController
             'versionType' => $result['versionType'],
             'versionName' => $result['versionName'],
             'changeSet' => $result['changeSet'],
-            'targetFileList' => $targetFileList
+            'targetFileList' => $targetFileList,
+            'mergedFiles' => $mergedFiles,
         ]);
         return [
             'id' => $processId,
@@ -1008,9 +1013,6 @@ class AdminCoreUpdaterController extends ModuleAdminController
      */
     protected function previewFile()
     {
-        if (!Settings::isDeveloperMode()) {
-            throw new PrestaShopException('Developer mode is not enabled');
-        }
         $compareProcessId = Tools::getValue('compareProcessId');
         $file = Tools::getValue('file');
         if (!$file) {
@@ -1021,36 +1023,185 @@ class AdminCoreUpdaterController extends ModuleAdminController
         if (!$result) {
             throw new PrestaShopException('Comparision result not found. Please reload the page and try again');
         }
-        $apiPath = preg_replace('#^' . preg_quote(basename(_PS_ADMIN_DIR_) . '/') . '#', 'admin/', $file);
-        $tmp = tempnam(_PS_CACHE_DIR_, 'cu');
-        try {
-            $this->factory->getApi()->downloadFiles(
-                $result['targetPHPVersion'],
-                $result['targetRevision'],
-                [ $apiPath ],
-                $tmp
-            );
-            $tar = new Archive_Tar($tmp);
-            $remoteContent = $tar->extractInString($apiPath);
-        } finally {
-            @unlink($tmp);
+        $changeSet = $result['changeSet'];
+        $changeType = $this->resolveChangeType($changeSet, $file);
+        if (!$changeType) {
+            throw new PrestaShopException('File does not belong to current compare result');
+        }
+        if (!$this->isPreviewableFile($file, $changeType)) {
+            throw new PrestaShopException('Preview is not available for this file');
         }
 
+        $mergeable = $changeType === 'change' && !empty($changeSet['change'][$file]);
+        if (!$mergeable && !Settings::isDeveloperMode()) {
+            throw new PrestaShopException('Developer mode is not enabled');
+        }
+
+        $apiPath = preg_replace('#^' . preg_quote(basename(_PS_ADMIN_DIR_) . '/') . '#', 'admin/', $file);
         $localPath = _PS_ROOT_DIR_ . '/' . $this->fixAdminDirectory($file);
         $localContent = file_exists($localPath) ? file_get_contents($localPath) : '';
 
-        $tmpRemote = tempnam(_PS_CACHE_DIR_, 'cu');
-        $tmpLocal = tempnam(_PS_CACHE_DIR_, 'cu');
-        file_put_contents($tmpRemote, $remoteContent);
-        file_put_contents($tmpLocal, $localContent);
-        $cmd = sprintf('diff -u %s %s 2>&1', escapeshellarg($tmpLocal), escapeshellarg($tmpRemote));
-        $diff = shell_exec($cmd);
-        @unlink($tmpRemote);
-        @unlink($tmpLocal);
+        $incomingContent = '';
+        if ($changeType !== 'remove') {
+            $incomingContent = $this->downloadRevisionFile(
+                $result['targetPHPVersion'],
+                $result['targetRevision'],
+                $apiPath
+            );
+        }
+
+        if ($mergeable) {
+            try {
+                $comparator = $this->factory->getComparator();
+                $baseContent = $this->downloadRevisionFile(
+                    $comparator->getOriginPHPVersion(),
+                    $comparator->getInstalledRevision(),
+                    $apiPath
+                );
+                $preview = MergeService::buildMergePreview($baseContent, $localContent, $incomingContent);
+            } catch (\Throwable $e) {
+                $this->factory->getLogger()->error('Falling back to whole-file merge preview for ' . $file . ': ' . $e->getMessage());
+                $preview = MergeService::buildWholeFilePreview('', $localContent, $incomingContent);
+            }
+            $preview['mode'] = 'merge';
+            return $preview;
+        }
 
         return [
-            'diff' => base64_encode($diff === null ? '' : $diff),
+            'mode' => 'diff',
+            'diff' => base64_encode(MergeService::buildDiff($localContent, $incomingContent)),
         ];
+    }
+
+    /**
+     * @param string|null $payload
+     * @param array $changeSet
+     *
+     * @return array
+     * @throws PrestaShopException
+     */
+    protected function parseMergedFiles($payload, $changeSet)
+    {
+        if (!$payload) {
+            return [];
+        }
+
+        $data = json_decode($payload, true);
+        if (!is_array($data)) {
+            throw new PrestaShopException('Invalid merged files payload');
+        }
+
+        $mergedFiles = [];
+        foreach ($data as $file => $content) {
+            if (!isset($changeSet['change'][$file]) || !$changeSet['change'][$file]) {
+                throw new PrestaShopException("Merged content is not allowed for file $file");
+            }
+            if (!is_string($content) || base64_decode($content, true) === false) {
+                throw new PrestaShopException("Invalid merged content for file $file");
+            }
+            $mergedFiles[$file] = $content;
+        }
+
+        return $mergedFiles;
+    }
+
+    /**
+     * @param array $changeSet
+     * @param string $file
+     *
+     * @return string|null
+     */
+    protected function resolveChangeType($changeSet, $file)
+    {
+        foreach (['change', 'add', 'remove'] as $type) {
+            if (isset($changeSet[$type][$file])) {
+                return $type;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * @param array $changeSet
+     *
+     * @return array
+     */
+    protected function buildPreviewableFilesMap($changeSet)
+    {
+        $previewableFiles = [];
+        foreach (['change', 'add', 'remove'] as $type) {
+            if (empty($changeSet[$type]) || !is_array($changeSet[$type])) {
+                continue;
+            }
+            foreach ($changeSet[$type] as $file => $modified) {
+                $previewableFiles[$file] = $this->isPreviewableFile($file, $type);
+            }
+        }
+
+        return $previewableFiles;
+    }
+
+    /**
+     * @param string $file
+     * @param string|null $changeType
+     *
+     * @return bool
+     */
+    protected function isPreviewableFile($file, $changeType = null)
+    {
+        $extension = strtolower(pathinfo($file, PATHINFO_EXTENSION));
+        $binaryExtensions = [
+            '7z', 'avi', 'bin', 'bmp', 'class', 'cur', 'dll', 'eot', 'exe',
+            'flac', 'gif', 'gz', 'ico', 'jar', 'jpeg', 'jpg', 'mp3', 'mp4',
+            'mov', 'ogg', 'otf', 'pdf', 'phar', 'png', 'psd', 'rar', 'so',
+            'svgz', 'tar', 'tgz', 'ttf', 'wav', 'webm', 'webp', 'woff',
+            'woff2', 'zip',
+        ];
+
+        if ($extension && in_array($extension, $binaryExtensions, true)) {
+            return false;
+        }
+
+        if ($changeType !== 'add') {
+            $localPath = _PS_ROOT_DIR_ . '/' . $this->fixAdminDirectory($file);
+            if (is_file($localPath)) {
+                $sample = file_get_contents($localPath, false, null, 0, 4096);
+                if ($sample !== false && strpos($sample, "\0") !== false) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * @param string $phpVersion
+     * @param string $revision
+     * @param string $path
+     *
+     * @return string
+     * @throws PrestaShopException
+     */
+    protected function downloadRevisionFile($phpVersion, $revision, $path)
+    {
+        $tmp = tempnam(_PS_CACHE_DIR_, 'cu');
+        try {
+            $this->factory->getApi()->downloadFiles(
+                $phpVersion,
+                $revision,
+                [$path],
+                $tmp
+            );
+            $tar = new Archive_Tar($tmp, 'gz');
+            $content = $tar->extractInString($path);
+            if ($content === false) {
+                throw new PrestaShopException("Failed to extract file $path from revision $revision");
+            }
+            return $content;
+        } finally {
+            @unlink($tmp);
+        }
     }
 
     /**

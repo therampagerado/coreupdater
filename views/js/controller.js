@@ -174,11 +174,14 @@ window.initializeCoreUpdater = function(translations) {
     incrementProcess('UPDATE', process, endProgress);
   };
 
-  var update = function(compareProcessId, ignored) {
+  var update = function(compareProcessId, ignored, mergedFiles) {
     initProgress(translations.UPDATE, translations.UPDATE_DESCRIPTION);
     var params = { compareProcessId: compareProcessId };
     if (ignored && ignored.length > 0) {
       params.ignoreFiles = ignored;
+    }
+    if (mergedFiles) {
+      params.mergedFiles = JSON.stringify(mergedFiles);
     }
     executeAction('INIT_UPDATE', params)
         .then(runUpdate)
@@ -293,4 +296,3 @@ window.initializeCoreUpdater = function(translations) {
     preview: preview,
   }
 };
-
